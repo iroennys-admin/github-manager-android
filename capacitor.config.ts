@@ -1,0 +1,22 @@
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.octomobile.app',
+  appName: 'OctoMobile',
+  webDir: 'dist',
+  server: {
+    androidScheme: 'https',
+    allowMixedContent: true,
+    cleartext: true,
+  },
+  android: {
+    allowMixedContent: true,
+    webContentsDebuggingEnabled: false,
+  },
+  plugins: {
+    StatusBar: { style: 'DARK', backgroundColor: '#0d1117', overlaysWebView: false },
+    Keyboard:  { resize: 'native', resizeOnFullScreen: true },
+  },
+};
+
+export default config;

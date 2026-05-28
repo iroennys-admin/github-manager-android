@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#1f2937"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </radialGradient>
+    <linearGradient id="octo" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#58a6ff"/>
+      <stop offset="60%" stop-color="#bc8cff"/>
+      <stop offset="100%" stop-color="#ff7eb6"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <!-- Octocat-inspired silhouette using a stylized octopus body -->
+  <g transform="translate(256,260)">
+    <!-- body (head) -->
+    <circle cx="0" cy="-20" r="118" fill="url(#octo)"/>
+    <!-- eyes -->
+    <circle cx="-44" cy="-32" r="14" fill="#0d1117"/>
+    <circle cx="44"  cy="-32" r="14" fill="#0d1117"/>
+    <circle cx="-39" cy="-37" r="4"  fill="#fff"/>
+    <circle cx="49"  cy="-37" r="4"  fill="#fff"/>
+    <!-- tentacles -->
+    <path d="M -100 60 Q -130 110 -110 160 Q -90 200 -60 180" stroke="url(#octo)" stroke-width="28" fill="none" stroke-linecap="round"/>
+    <path d="M -40 80  Q -50 140 -30 180 Q -10 210 10 190" stroke="url(#octo)" stroke-width="28" fill="none" stroke-linecap="round"/>
+    <path d="M 40 80   Q 50 140 30 180 Q 10 210 -10 190" stroke="url(#octo)" stroke-width="28" fill="none" stroke-linecap="round"/>
+    <path d="M 100 60  Q 130 110 110 160 Q 90 200 60 180" stroke="url(#octo)" stroke-width="28" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

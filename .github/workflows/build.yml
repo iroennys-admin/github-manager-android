@@ -1,0 +1,99 @@
+name: Build OctoMobile APK
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0'
+
+      - name: Show versions
+        run: |
+          node --version; npm --version; java -version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+
+      - name: Install npm dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Type check (non-blocking)
+        run: npx tsc --noEmit || echo "::warning::TS errors"
+        continue-on-error: true
+
+      - name: Build web app
+        run: npx vite build
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Accept Android licenses
+        run: yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: Build Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Build Release APK (unsigned)
+        working-directory: android
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: List APKs
+        run: find android/app/build/outputs -name "*.apk" -type f -exec ls -lh {} \;
+
+      - name: Rename APKs
+        run: |
+          mkdir -p artifacts
+          [ -f android/app/build/outputs/apk/debug/app-debug.apk ] && \
+            cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/OctoMobile-debug.apk
+          [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ] && \
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk artifacts/OctoMobile-release-unsigned.apk
+          ls -lh artifacts/
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OctoMobile-APKs
+          path: artifacts/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create Release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.apk
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

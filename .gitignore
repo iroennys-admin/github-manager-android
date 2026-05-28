@@ -1,0 +1,27 @@
+node_modules/
+dist/
+
+# Capacitor / Android
+android/app/build/
+android/build/
+android/.gradle/
+android/app/release/
+android/local.properties
+android/capacitor.settings.gradle.lock
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.local
+*.keystore
+*.jks
+api_keys.json
+
+# Logs
+*.log

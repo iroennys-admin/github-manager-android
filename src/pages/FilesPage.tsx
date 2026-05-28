@@ -1,0 +1,58 @@
+import React, { useEffect, useState } from 'react';
+import TopBar from '../ui/TopBar';
+import { git, type ContentEntry } from '../api/github';
+import { useRouter } from '../state/router';
+import { toast } from '../ui/Toast';
+
+export default function FilesPage({ owner, repo, path = '', ref }: { owner: string; repo: string; path?: string; ref?: string }) {
+  const router = useRouter();
+  const [items, setItems] = useState<ContentEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    git.contents(owner, repo, path, ref).then(r => {
+      const arr = Array.isArray(r) ? r : [r];
+      arr.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : (a.type === 'dir' ? -1 : 1)));
+      setItems(arr);
+    }).catch(e => toast.error(e.message)).finally(() => setLoading(false));
+  }, [owner, repo, path, ref]);
+
+  const crumbs = path.split('/').filter(Boolean);
+
+  return (
+    <>
+      <TopBar title="Files" sub={`${owner}/${repo}${ref ? '@' + ref : ''}`} />
+      <div className="path-bar">
+        <span className="crumb" onClick={() => router.push({ name: 'files', owner, repo, ref })}>~</span>
+        {crumbs.map((c, i) => (
+          <React.Fragment key={i}>
+            <span className="sep">/</span>
+            <span className="crumb" onClick={() => router.push({ name: 'files', owner, repo, path: crumbs.slice(0, i + 1).join('/'), ref })}>{c}</span>
+          </React.Fragment>
+        ))}
+      </div>
+      <div className="scroll-area scroll">
+        <div className="list">
+          {loading && <div className="loading"><span className="spinner" /> Cargando…</div>}
+          {items.map(e => (
+            <div key={e.path} className="file-row" onClick={() => {
+              if (e.type === 'dir') router.push({ name: 'files', owner, repo, path: e.path, ref });
+              else router.push({ name: 'file', owner, repo, path: e.path, ref });
+            }}>
+              <span className="ico">{e.type === 'dir' ? '📁' : '📄'}</span>
+              <span className="name">{e.name}</span>
+              {e.type !== 'dir' && <span className="meta">{prettySize(e.size)}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+export function prettySize(n: number): string {
+  if (n < 1024) return n + 'B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + 'KB';
+  return (n / 1024 / 1024).toFixed(1) + 'MB';
+}
