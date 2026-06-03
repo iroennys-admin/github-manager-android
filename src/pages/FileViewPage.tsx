@@ -24,11 +24,33 @@ export default function FileViewPage({ owner, repo, path, refSpec }: { owner: st
 
   if (!entry) return (<><TopBar title="File" /><div className="loading"><span className="spinner" /> Cargando…</div></>);
   const isMd = path.toLowerCase().endsWith('.md');
+  const isShaRef = /^[0-9a-f]{40}$/i.test(refSpec || '');
 
   return (
     <>
       <TopBar title={path.split('/').pop() || path} sub={`${owner}/${repo}`}
-        actions={<button className="btn-icon" onClick={() => router.push({ name: 'edit-file', owner, repo, path, sha: entry.sha, content, ref: refSpec })}>✎</button>} />
+        actions={
+          /* Solo mostrar botón de edición si NO es un ref histórico (SHA) */
+          !isShaRef
+            ? <button className="btn-icon" onClick={() => router.push({ name: 'edit-file', owner, repo, path, sha: entry.sha, content, ref: refSpec })}>✎</button>
+            : undefined
+        }
+      />
+      {/* Banner de archivo histórico */}
+      {isShaRef && (
+        <div style={{
+          background: 'rgba(210,153,34,0.15)',
+          borderBottom: '1px solid rgba(210,153,34,0.4)',
+          padding: '6px 14px',
+          fontSize: 12,
+          color: 'var(--warn)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          🕐 <span>Versión histórica · commit <code className="mono">{refSpec!.slice(0, 7)}</code> · solo lectura</span>
+        </div>
+      )}
       <div className="scroll-area scroll" style={{ padding: 12 }}>
         {isImage ? (
           <div style={{ textAlign: 'center' }}><img src={entry.download_url || ''} alt="" style={{ maxWidth: '100%', borderRadius: 8 }} /></div>

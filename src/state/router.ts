@@ -16,7 +16,7 @@ export type Route =
   | { name: 'pr'; owner: string; repo: string; number: number }
   | { name: 'branches'; owner: string; repo: string }
   | { name: 'commits'; owner: string; repo: string; ref?: string }
-  | { name: 'commit'; owner: string; repo: string; sha: string }
+  | { name: 'commit'; owner: string; repo: string; sha: string; commitList?: string[]; commitIdx?: number }
   | { name: 'files'; owner: string; repo: string; path?: string; ref?: string }
   | { name: 'file'; owner: string; repo: string; path: string; ref?: string }
   | { name: 'edit-file'; owner: string; repo: string; path: string; sha?: string; content?: string; ref?: string }

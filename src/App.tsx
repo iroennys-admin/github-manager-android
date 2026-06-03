@@ -150,7 +150,7 @@ function renderPage(r: Route): React.ReactNode {
     case 'about': return <AboutPage />;
     case 'branches': return <BranchesPage owner={r.owner} repo={r.repo} />;
     case 'commits': return <CommitsPage owner={r.owner} repo={r.repo} ref={r.ref} />;
-    case 'commit': return <CommitDetailPage owner={r.owner} repo={r.repo} sha={r.sha} />;
+    case 'commit': return <CommitDetailPage owner={r.owner} repo={r.repo} sha={r.sha} commitList={r.commitList} commitIdx={r.commitIdx} />;
     case 'files': return <FilesPage owner={r.owner} repo={r.repo} path={r.path} ref={r.ref} />;
     case 'file': return <FileViewPage owner={r.owner} repo={r.repo} path={r.path} refSpec={r.ref} />;
     case 'edit-file': return <EditFilePage owner={r.owner} repo={r.repo} path={r.path} sha={r.sha} content={r.content} refSpec={r.ref} />;

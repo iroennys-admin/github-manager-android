@@ -20,9 +20,29 @@ export default function FilesPage({ owner, repo, path = '', ref }: { owner: stri
 
   const crumbs = path.split('/').filter(Boolean);
 
+  // Detecta si ref parece un SHA completo (40 hex) — modo historial
+  const isShaRef = /^[0-9a-f]{40}$/i.test(ref || '');
+
   return (
     <>
-      <TopBar title="Files" sub={`${owner}/${repo}${ref ? '@' + ref : ''}`} />
+      <TopBar title="Files" sub={`${owner}/${repo}${ref ? '@' + ref.slice(0, isShaRef ? 7 : 40) : ''}`} />
+      {/* Banner de aviso cuando estás viendo código histórico */}
+      {isShaRef && (
+        <div style={{
+          background: 'rgba(210,153,34,0.15)',
+          borderBottom: '1px solid rgba(210,153,34,0.4)',
+          padding: '6px 14px',
+          fontSize: 12,
+          color: 'var(--warn)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          🕐 <span>Código histórico · commit <code className="mono">{ref!.slice(0, 7)}</code></span>
+          <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>solo lectura</span>
+        </div>
+      )}
+
       <div className="path-bar">
         <span className="crumb" onClick={() => router.push({ name: 'files', owner, repo, ref })}>~</span>
         {crumbs.map((c, i) => (
