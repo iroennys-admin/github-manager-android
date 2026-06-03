@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="notifications"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_notifications"
+        android:shortcutLongLabel="@string/shortcut_notifications_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.octomobile.app"
+            android:targetClass="com.octomobile.app.MainActivity" />
+        <extra android:name="route" android:value="notifications" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="search"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_search"
+        android:shortcutLongLabel="@string/shortcut_search_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.octomobile.app"
+            android:targetClass="com.octomobile.app.MainActivity" />
+        <extra android:name="route" android:value="search" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="repos"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_repos"
+        android:shortcutLongLabel="@string/shortcut_repos_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.octomobile.app"
+            android:targetClass="com.octomobile.app.MainActivity" />
+        <extra android:name="route" android:value="repos" />
+    </shortcut>
+</shortcuts>

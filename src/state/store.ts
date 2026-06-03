@@ -17,6 +17,8 @@ export interface AppSettings {
   perPage: number;
   /** Optional override of the OAuth Device Flow client id */
   oauthClientId?: string;
+  /** PIN lock enabled */
+  pinLockEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -27,15 +29,29 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationsIntervalMin: 15,
   language: 'es',
   perPage: 30,
+  pinLockEnabled: false,
 };
+
+export interface FavoriteRepo {
+  id: number;
+  full_name: string;
+  owner: string;
+  repo: string;
+  avatar_url: string;
+  addedAt: number;
+}
 
 export interface AppState {
   token: string | null;
   me: User | null;
   settings: AppSettings;
+  favorites: FavoriteRepo[];
   setToken: (t: string | null) => void;
   setMe: (u: User | null) => void;
   updateSettings: (p: Partial<AppSettings>) => void;
+  addFavorite: (repo: FavoriteRepo) => void;
+  removeFavorite: (id: number) => void;
+  isFavorite: (id: number) => boolean;
   logout: () => void;
 }
 

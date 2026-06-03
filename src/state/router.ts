@@ -10,7 +10,7 @@ export type Route =
   | { name: 'login' }
   | { name: 'repos' }
   | { name: 'repo'; owner: string; repo: string }
-  | { name: 'issues'; owner?: string; repo?: string }
+  | { name: 'issues'; owner?: string; repo?: string; mode?: 'issue' | 'pr' }
   | { name: 'issue'; owner: string; repo: string; number: number }
   | { name: 'pulls'; owner?: string; repo?: string }
   | { name: 'pr'; owner: string; repo: string; number: number }
@@ -35,11 +35,16 @@ export type Route =
   | { name: 'orgs' }
   | { name: 'org'; login: string }
   | { name: 'search' }
+  | { name: 'repo-search'; owner: string; repo: string }
   | { name: 'settings' }
   | { name: 'about' }
   | { name: 'create-repo' }
   | { name: 'create-issue'; owner: string; repo: string }
   | { name: 'create-pr'; owner: string; repo: string }
+  | { name: 'compare'; owner: string; repo: string; base?: string; head?: string }
+  | { name: 'repo-settings'; owner: string; repo: string }
+  | { name: 'reset-branch'; owner: string; repo: string; sha: string; branch?: string }
+  | { name: 'blame'; owner: string; repo: string; path: string; ref?: string }
   | { name: 'web-view'; url: string; title?: string };
 
 export interface Router {

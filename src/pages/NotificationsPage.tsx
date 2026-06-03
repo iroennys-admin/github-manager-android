@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import TopBar from '../ui/TopBar';
 import { notifications, type Notification } from '../api/github';
 import { useRouter } from '../state/router';
@@ -9,16 +9,46 @@ export default function NotificationsPage() {
   const router = useRouter();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const load = async () => {
-    setLoading(true);
-    try { setItems(await notifications.list({ all: showAll, per_page: 50 })); }
-    catch (e: any) { toast.error(e?.message); }
-    finally { setLoading(false); }
+  const load = async (pageNum: number, append = false) => {
+    if (pageNum === 1) setLoading(true); else setLoadingMore(true);
+    try {
+      const data = await notifications.list({ all: showAll, per_page: 50, page: pageNum });
+      if (append) setItems(prev => [...prev, ...data]);
+      else setItems(data);
+      setHasMore(data.length === 50);
+      setPage(pageNum);
+    } catch (e: any) { toast.error(e?.message); }
+    finally { setLoading(false); setLoadingMore(false); }
   };
-  useEffect(() => { load(); }, [showAll]);
+
+  useEffect(() => { load(1); }, [showAll]);
+
+  // Infinite scroll
+  useEffect(() => {
+    if (!sentinelRef.current || !hasMore) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && !loading && !loadingMore && hasMore) {
+        load(page + 1, true);
+      }
+    }, { threshold: 0.1 });
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, page]);
+
+  const doRefresh = async () => {
+    setRefreshing(true);
+    await load(1);
+    setRefreshing(false);
+    toast.success('Actualizado');
+  };
 
   const markAll = async () => {
     setBusy(true);
@@ -42,9 +72,9 @@ export default function NotificationsPage() {
       <div className="toolbar">
         <button className={`chip ${!showAll ? 'active' : ''}`} onClick={() => setShowAll(false)}>Sin leer</button>
         <button className={`chip ${showAll ? 'active' : ''}`} onClick={() => setShowAll(true)}>Todas</button>
-        <button className="chip" onClick={load}>↻ Refresh</button>
+        <button className="chip" onClick={doRefresh}>↻ Refresh</button>
       </div>
-      <div className="scroll-area scroll">
+      <div className="scroll-area scroll" onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, doRefresh)}>
         <div className="list">
           {loading && <div className="loading"><span className="spinner" /> Cargando…</div>}
           {!loading && items.length === 0 && (
@@ -60,6 +90,10 @@ export default function NotificationsPage() {
               {n.unread && <span className="badge open">●</span>}
             </div>
           ))}
+          {/* Infinite scroll sentinel */}
+          {hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
+          {loadingMore && <div className="loading"><span className="spinner" /> Cargando más…</div>}
+          {!hasMore && items.length > 0 && <div className="muted small center" style={{ padding: 16 }}>No hay más notificaciones</div>}
         </div>
       </div>
     </>
@@ -75,4 +109,12 @@ function notifIcon(n: Notification): string {
     case 'Discussion': return '💬';
     default: return '🔔';
   }
+}
+
+let touchStartY = 0;
+function handleTouchStart(e: React.TouchEvent) { touchStartY = e.touches[0].clientY; }
+function handleTouchEnd(e: React.TouchEvent, onRefresh: () => void) {
+  const diff = touchStartY - e.changedTouches[0].clientY;
+  const el = e.currentTarget as HTMLElement;
+  if (diff < -80 && el.scrollTop <= 0) onRefresh();
 }

@@ -110,6 +110,24 @@ export default function HomePage() {
           ))}
         </div>
 
+        {/* Favorite repos */}
+        {app.favorites.length > 0 && (
+          <>
+            <div className="section-title">⭐ Favoritos</div>
+            <div className="list">
+              {app.favorites.slice(0, 10).map(f => (
+                <div key={f.id} className="card-row" onClick={() => router.push({ name: 'repo', owner: f.owner, repo: f.repo })}>
+                  <div className="avatar"><img src={f.avatar_url} alt="" /></div>
+                  <div className="body">
+                    <div className="title truncate">{f.full_name}</div>
+                  </div>
+                  <span className="fav-star" onClick={(e) => { e.stopPropagation(); app.removeFavorite(f.id); toast.success('Eliminado de favoritos'); }}>⭐</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* Activity feed */}
         <div className="section-title">Actividad</div>
         <div className="list">

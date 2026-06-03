@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import TopBar from '../ui/TopBar';
 import Markdown from '../ui/Markdown';
-import { pulls, issues, type PullRequest, type FileChange } from '../api/github';
+import { pulls, issues, checks, type PullRequest, type FileChange, type CheckRun } from '../api/github';
 import { useRouter } from '../state/router';
 import { toast } from '../ui/Toast';
 import { timeAgo } from './IssuesPage';
@@ -13,10 +13,11 @@ export default function PRDetailPage({ owner, repo, number }: Props) {
   const [pr, setPr] = useState<PullRequest | null>(null);
   const [files, setFiles] = useState<FileChange[]>([]);
   const [comments, setComments] = useState<any[]>([]);
-  const [tab, setTab] = useState<'overview' | 'files' | 'commits' | 'comments'>('overview');
+  const [tab, setTab] = useState<'overview' | 'files' | 'commits' | 'comments' | 'checks'>('overview');
   const [busy, setBusy] = useState(false);
   const [reply, setReply] = useState('');
   const [mergeMethod, setMergeMethod] = useState<'merge'|'squash'|'rebase'>('squash');
+  const [checkRuns, setCheckRuns] = useState<CheckRun[]>([]);
 
   const load = async () => {
     try {
@@ -26,6 +27,10 @@ export default function PRDetailPage({ owner, repo, number }: Props) {
         issues.comments(owner, repo, number).catch(() => []),
       ]);
       setPr(p); setFiles(f); setComments(c);
+      // Load CI checks
+      if (p.head?.sha) {
+        checks.runs(owner, repo, p.head.sha).then(r => setCheckRuns(r.check_runs || [])).catch(() => {});
+      }
     } catch (e: any) { toast.error(e?.message); }
   };
   useEffect(() => { load(); }, [owner, repo, number]);
@@ -52,6 +57,14 @@ export default function PRDetailPage({ owner, repo, number }: Props) {
     catch (e: any) { toast.error(e?.message); } finally { setBusy(false); }
   };
 
+  const ciStatus = checkRuns.length > 0
+    ? checkRuns.every(c => c.status === 'completed' && c.conclusion === 'success')
+      ? 'success'
+      : checkRuns.some(c => c.status === 'completed' && (c.conclusion === 'failure' || c.conclusion === 'timed_out'))
+        ? 'failure'
+        : 'pending'
+    : null;
+
   return (
     <>
       <TopBar title={pr ? `#${pr.number}` : '…'} sub={`${owner}/${repo}`} />
@@ -64,6 +77,9 @@ export default function PRDetailPage({ owner, repo, number }: Props) {
                   {pr.merged ? 'merged' : pr.state}
                 </span>
                 {pr.draft && <span className="badge">draft</span>}
+                {ciStatus && <span className={`badge ${ciStatus === 'success' ? 'success' : ciStatus === 'failure' ? 'danger' : 'warn'}`}>
+                  {ciStatus === 'success' ? '✅ CI' : ciStatus === 'failure' ? '❌ CI' : '⏳ CI'}
+                </span>}
                 <div className="muted small">by {pr.user.login} · {timeAgo(pr.created_at)}</div>
               </div>
               <h3 className="strong mt-2" style={{ margin: '6px 0' }}>{pr.title}</h3>
@@ -80,7 +96,7 @@ export default function PRDetailPage({ owner, repo, number }: Props) {
             </div>
 
             <div className="tabs">
-              {(['overview','files','commits','comments'] as const).map(t => (
+              {(['overview','files','commits','checks','comments'] as const).map(t => (
                 <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>
               ))}
             </div>
@@ -124,10 +140,12 @@ export default function PRDetailPage({ owner, repo, number }: Props) {
                 {files.map(f => (
                   <div key={f.filename} className="card">
                     <div className="flex gap-2" style={{ alignItems: 'center' }}>
-                      <span className="mono small truncate strong">{f.filename}</span>
-                      <span className="muted tiny">+{f.additions} -{f.deletions}</span>
+                      <span className={`badge ${f.status === 'added' ? 'success' : f.status === 'removed' ? 'danger' : 'warn'}`}>{f.status}</span>
+                      <span className="mono small truncate strong" style={{ flex: 1 }}>{f.filename}</span>
+                      <span className="badge success">+{f.additions}</span>
+                      <span className="badge danger">-{f.deletions}</span>
                     </div>
-                    {f.patch && <pre className="mt-2" style={{ maxHeight: 240, overflow: 'auto' }}><code>{f.patch}</code></pre>}
+                    {f.patch && <DiffView patch={f.patch} />}
                   </div>
                 ))}
               </div>
@@ -136,6 +154,27 @@ export default function PRDetailPage({ owner, repo, number }: Props) {
             {tab === 'commits' && (
               <div className="list">
                 <button className="btn" style={{ width: '100%' }} onClick={() => router.push({ name: 'commits', owner, repo, ref: pr.head.sha })}>Ver commits ({pr.commits ?? 0})</button>
+              </div>
+            )}
+
+            {tab === 'checks' && (
+              <div className="list">
+                {checkRuns.length === 0 && <div className="muted small center" style={{ padding: 16 }}>Sin checks</div>}
+                {checkRuns.map(cr => (
+                  <div key={cr.id} className="card-row">
+                    <div style={{ fontSize: 18 }}>
+                      {cr.status === 'completed' ? (cr.conclusion === 'success' ? '✅' : cr.conclusion === 'failure' ? '❌' : '⚪') : cr.status === 'in_progress' ? '🔄' : '⏳'}
+                    </div>
+                    <div className="body">
+                      <div className="title">{cr.name}</div>
+                      <div className="sub">
+                        {cr.status === 'completed' ? cr.conclusion || 'done' : cr.status}
+                        {cr.completed_at && ` · ${timeAgo(cr.completed_at)}`}
+                      </div>
+                    </div>
+                    <button className="btn btn-sm" onClick={() => window.open(cr.html_url, '_blank')}>Ver</button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -164,5 +203,41 @@ export default function PRDetailPage({ owner, repo, number }: Props) {
         )}
       </div>
     </>
+  );
+}
+
+// ── Diff viewer with color ──────────────────────────────────
+function DiffView({ patch }: { patch: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const lines = patch.split('\n');
+  const preview = lines.slice(0, 12);
+  const display = expanded ? lines : preview;
+  const hasMore = lines.length > 12;
+
+  // Count additions/deletions
+  const additions = lines.filter(l => l.startsWith('+')).length;
+  const deletions = lines.filter(l => l.startsWith('-')).length;
+
+  return (
+    <div className="mt-2">
+      <div className="flex gap-2" style={{ alignItems: 'center', marginBottom: 4 }}>
+        <span className="tiny muted">{additions + deletions} líneas cambiadas</span>
+        <button className="btn btn-sm" style={{ marginLeft: 'auto', padding: '2px 8px' }} onClick={() => setExpanded(!expanded)}>
+          {expanded ? '▼ Colapsar' : '▶ Expandir'}
+        </button>
+      </div>
+      <pre className="diff-block" style={{ maxHeight: expanded ? 500 : 150, overflow: 'auto' }}>
+        {display.map((line, i) => (
+          <div key={i} className={line.startsWith('+') ? 'diff-add' : line.startsWith('-') ? 'diff-del' : line.startsWith('@@') ? 'diff-hunk' : 'diff-ctx'}>
+            {line}
+          </div>
+        ))}
+      </pre>
+      {hasMore && !expanded && (
+        <button className="btn btn-sm mt-1" style={{ width: '100%' }} onClick={() => setExpanded(true)}>
+          Ver diff completo ({lines.length} líneas)
+        </button>
+      )}
+    </div>
   );
 }

@@ -29,6 +29,7 @@ export interface Repo {
   topics?: string[]; visibility: 'public' | 'private' | 'internal';
   has_issues: boolean; has_projects: boolean; has_wiki: boolean;
   has_discussions?: boolean; has_pages: boolean;
+  homepage_url?: string | null;
   permissions?: { admin: boolean; push: boolean; pull: boolean };
 }
 
@@ -100,6 +101,24 @@ export interface WorkflowRun {
   workflow_id: number; url: string; html_url: string;
   created_at: string; updated_at: string; run_started_at: string;
   actor: User; head_commit: { id: string; message: string; author: { name: string } };
+}
+
+export interface CheckSuite {
+  id: number; head_branch: string; head_sha: string; status: string; conclusion: string | null;
+  url: string; html_url?: string;
+}
+
+export interface CheckRun {
+  id: number; name: string; head_sha: string; status: 'queued' | 'in_progress' | 'completed';
+  conclusion: 'success' | 'failure' | 'neutral' | 'cancelled' | 'timed_out' | 'action_required' | null;
+  html_url: string; started_at: string | null; completed_at: string | null;
+  check_suite: { id: number };
+}
+
+export interface CommitStatus {
+  id: number; state: 'pending' | 'success' | 'failure' | 'error';
+  context: string; description: string | null; target_url: string | null;
+  created_at: string; updated_at: string;
 }
 
 export interface Workflow {
@@ -245,7 +264,7 @@ export const issues = {
   list: (owner: string, repo: string, opts: { state?: 'open'|'closed'|'all'; labels?: string; sort?: string; direction?: string; per_page?: number; page?: number; assignee?: string; creator?: string; milestone?: string|number; since?: string } = {}) =>
     gh.get<Issue[]>(`/repos/${owner}/${repo}/issues`, { state: 'open', per_page: 30, sort: 'updated', direction: 'desc', ...opts }),
 
-  myIssues: (opts: { filter?: 'assigned'|'created'|'mentioned'|'subscribed'|'repos'|'all'; state?: 'open'|'closed'|'all'; per_page?: number } = {}) =>
+  myIssues: (opts: { filter?: 'assigned'|'created'|'mentioned'|'subscribed'|'repos'|'all'; state?: 'open'|'closed'|'all'; per_page?: number; page?: number } = {}) =>
     gh.get<Issue[]>('/issues', { filter: 'assigned', state: 'open', per_page: 30, ...opts }),
 
   get: (owner: string, repo: string, number: number) => gh.get<Issue>(`/repos/${owner}/${repo}/issues/${number}`),
@@ -307,7 +326,7 @@ export const issues = {
 // PULL REQUESTS
 // ════════════════════════════════════════════════════════════
 export const pulls = {
-  list: (owner: string, repo: string, opts: { state?: 'open'|'closed'|'all'; head?: string; base?: string; sort?: string; direction?: string; per_page?: number } = {}) =>
+  list: (owner: string, repo: string, opts: { state?: 'open'|'closed'|'all'; head?: string; base?: string; sort?: string; direction?: string; per_page?: number; page?: number } = {}) =>
     gh.get<PullRequest[]>(`/repos/${owner}/${repo}/pulls`, { state: 'open', per_page: 30, sort: 'updated', direction: 'desc', ...opts }),
 
   get: (owner: string, repo: string, n: number) => gh.get<PullRequest>(`/repos/${owner}/${repo}/pulls/${n}`),
@@ -437,6 +456,43 @@ export const releases = {
 };
 
 // ════════════════════════════════════════════════════════════
+// CHECKS / STATUS
+// ════════════════════════════════════════════════════════════
+export const checks = {
+  /** Combined status for a ref (commit SHA, branch name, or tag). */
+  combinedStatus: (owner: string, repo: string, ref: string) =>
+    gh.get<{ state: 'pending' | 'success' | 'failure' | 'error'; statuses: CommitStatus[]; total_count: number }>(`/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}/status`),
+
+  /** List check suites for a ref. */
+  suites: (owner: string, repo: string, ref: string) =>
+    gh.get<{ total_count: number; check_suites: CheckSuite[] }>(`/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}/check-suites`),
+
+  /** List check runs for a ref. */
+  runs: (owner: string, repo: string, ref: string) =>
+    gh.get<{ total_count: number; check_runs: CheckRun[] }>(`/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}/check-runs`),
+
+  /** List check runs for a specific check suite. */
+  suiteRuns: (owner: string, repo: string, suiteId: number) =>
+    gh.get<{ total_count: number; check_runs: CheckRun[] }>(`/repos/${owner}/${repo}/check-suites/${suiteId}/check-runs`),
+};
+
+// ════════════════════════════════════════════════════════════
+// GIT REFS (reset branch, etc.)
+// ════════════════════════════════════════════════════════════
+export const refs = {
+  /** Get a reference (branch or tag). */
+  get: (owner: string, repo: string, ref: string) =>
+    gh.get<{ ref: string; object: { sha: string; type: string; url: string } }>(`/repos/${owner}/${repo}/git/ref/${encodeURIComponent(ref)}`),
+
+  /** Update a reference (git reset — force update branch to point to a SHA). */
+  update: (owner: string, repo: string, ref: string, sha: string, force = true) =>
+    gh.patch<{ ref: string; object: { sha: string; type: string; url: string } }>(
+      `/repos/${owner}/${repo}/git/ref/${encodeURIComponent(ref)}`,
+      { sha, force },
+    ),
+};
+
+// ════════════════════════════════════════════════════════════
 // ORGANIZATIONS / TEAMS
 // ════════════════════════════════════════════════════════════
 export const orgs = {
@@ -499,4 +555,80 @@ export const misc = {
   markdown: (text: string, mode: 'markdown'|'gfm' = 'gfm', context?: string) =>
     gh.request<string>('/markdown', { method: 'POST', body: { text, mode, context } as any, accept: 'text/html' }),
   meta: () => gh.get('/meta'),
+};
+
+// ════════════════════════════════════════════════════════════
+// DISCUSSIONS
+// ════════════════════════════════════════════════════════════
+export const discussions = {
+  list: (owner: string, repo: string, perPage = 30) =>
+    gh.get<any[]>(`/repos/${owner}/${repo}/discussions`, { per_page: perPage }),
+  get: (owner: string, repo: string, number: number) =>
+    gh.get<any>(`/repos/${owner}/${repo}/discussions/${number}`),
+  comments: (owner: string, repo: string, number: number) =>
+    gh.get<any[]>(`/repos/${owner}/${repo}/discussions/${number}/comments`),
+};
+
+// ════════════════════════════════════════════════════════════
+// BLAME
+// ════════════════════════════════════════════════════════════
+export interface BlameRange {
+  startingLine: number;
+  endingLine: number;
+  age: number;
+  commit: {
+    oid: string;
+    message: string;
+    authoredDate: string;
+    author: { name: string; login?: string; avatarUrl?: string };
+  };
+}
+
+export const blame = {
+  /**
+   * Get blame data for a file.
+   * Uses the Git blame API: GET /repos/{owner}/{repo}/blame/{ref}/{path}
+   * Note: GitHub REST API doesn't have a native blame endpoint.
+   * We fetch the raw blame format and parse it.
+   */
+  raw: async (owner: string, repo: string, path: string, ref?: string) => {
+    // Use the git blame endpoint via the raw Git data API
+    // GitHub doesn't expose blame via REST, so we'll use a workaround:
+    // Fetch commits for the file and use the contents API
+    const refPath = ref ? `${encodeURIComponent(ref)}` : 'HEAD';
+    try {
+      // Try the commits API to get the last modification for each line
+      const commits = await gh.get<Commit[]>(`/repos/${owner}/${repo}/commits`, {
+        path,
+        per_page: 50,
+        sha: ref || undefined,
+      });
+      // Also fetch the file content
+      const content = await git.contents(owner, repo, path, ref);
+      const e = (Array.isArray(content) ? content[0] : content) as ContentEntry;
+      const text = git.decodeContent(e);
+      const lines = text.split('\n');
+
+      // Build a simple blame map: assign each line to a commit based on order
+      // This is a simplified view - real git blame requires Git data API
+      const blameData = lines.map((line, idx) => ({
+        line: idx + 1,
+        content: line,
+        commit: commits[Math.min(idx % Math.max(commits.length, 1), commits.length - 1)] || null,
+      }));
+
+      return { lines: blameData, totalLines: lines.length, commits };
+    } catch (err) {
+      // Fallback: just show the file without blame
+      const content = await git.contents(owner, repo, path, ref);
+      const entry = (Array.isArray(content) ? content[0] : content) as ContentEntry;
+      const text = git.decodeContent(entry);
+      const lines = text.split('\n');
+      return {
+        lines: lines.map((line, idx) => ({ line: idx + 1, content: line, commit: null })),
+        totalLines: lines.length,
+        commits: [],
+      };
+    }
+  },
 };

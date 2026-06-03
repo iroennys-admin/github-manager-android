@@ -4,6 +4,7 @@ import { useApp, type Theme } from '../state/store';
 import { useRouter } from '../state/router';
 import { misc } from '../api/github';
 import { toast } from '../ui/Toast';
+import PinLockScreen, { getStoredPin, setStoredPin, clearStoredPin } from './PinLockScreen';
 
 const THEMES: { id: Theme; name: string }[] = [
   { id: 'github-dark',    name: 'GitHub Dark' },
@@ -17,10 +18,20 @@ export default function SettingsPage() {
   const app = useApp();
   const router = useRouter();
   const [rate, setRate] = useState<any>(null);
+  const [showPinSetup, setShowPinSetup] = useState(false);
 
   useEffect(() => {
     misc.rateLimit().then(r => setRate(r.rate)).catch(() => {});
   }, []);
+
+  if (showPinSetup) {
+    return (
+      <>
+        <TopBar title="Configurar PIN" />
+        <PinLockScreen onUnlock={() => { setShowPinSetup(false); toast.success('PIN configurado'); }} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -53,6 +64,51 @@ export default function SettingsPage() {
             <input type="range" min="12" max="20" step="1" value={app.settings.fontSize}
                    onChange={e => app.updateSettings({ fontSize: Number(e.target.value) })} />
           </div>
+          <div className="field">
+            <label>Idioma</label>
+            <select value={app.settings.language} onChange={e => app.updateSettings({ language: e.target.value as 'en' | 'es' })}>
+              <option value="es">🇪🇸 Español</option>
+              <option value="en">🇺🇸 English</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="section-title">Seguridad</div>
+        <div className="card" style={{ margin: 12 }}>
+          <div className="row-between" style={{ padding: '6px 0' }}>
+            <div>
+              <div className="strong">Bloqueo PIN</div>
+              <div className="muted tiny">Requerir PIN para abrir la app</div>
+            </div>
+            <div className={`toggle ${app.settings.pinLockEnabled ? 'on' : ''}`}
+                 onClick={() => {
+                   if (app.settings.pinLockEnabled) {
+                     // Disable PIN
+                     app.updateSettings({ pinLockEnabled: false });
+                     clearStoredPin();
+                     toast.success('PIN desactivado');
+                   } else {
+                     // Show PIN setup
+                     setShowPinSetup(true);
+                   }
+                 }} />
+          </div>
+        </div>
+
+        <div className="section-title">Favoritos</div>
+        <div className="card" style={{ margin: 12 }}>
+          {app.favorites.length === 0 ? (
+            <div className="muted small center">Sin repos favoritos. Agrega uno desde la página de un repo.</div>
+          ) : (
+            <>
+              {app.favorites.map(f => (
+                <div key={f.id} className="row-between" style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div className="small strong" onClick={() => router.push({ name: 'repo', owner: f.owner, repo: f.repo })} style={{ cursor: 'pointer' }}>{f.full_name}</div>
+                  <button className="btn btn-sm btn-danger" onClick={() => { app.removeFavorite(f.id); toast.success('Eliminado'); }}>✕</button>
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         <div className="section-title">Notificaciones</div>

@@ -4,16 +4,18 @@
 // ============================================================
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import TopBar from '../ui/TopBar';
-import { git, type Commit, type Branch } from '../api/github';
+import { git, repos, type Commit, type Branch, type Repo } from '../api/github';
 import { useRouter } from '../state/router';
 import { toast } from '../ui/Toast';
 import { timeAgo } from './IssuesPage';
 
 const PER_PAGE = 30;
 
+interface Props { owner: string; repo: string; ref?: string; }
+
 export default function CommitsPage({
   owner, repo, ref,
-}: { owner: string; repo: string; ref?: string }) {
+}: Props) {
   const router = useRouter();
 
   // ── estado ──────────────────────────────────────────────
@@ -28,6 +30,10 @@ export default function CommitsPage({
   const [selRef, setSelRef]     = useState<string>(ref || '');
   const [showFilter, setShowFilter] = useState(false);
 
+  // repo info & pull-to-refresh
+  const [info, setInfo]         = useState<Repo | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
   // ref del sentinel para infinite-scroll
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -36,6 +42,7 @@ export default function CommitsPage({
     git.branches(owner, repo, 100)
       .then(setBranches)
       .catch(() => {});
+    repos.get(owner, repo).then(setInfo).catch(() => {});
   }, [owner, repo]);
 
   // ── carga inicial / cuando cambia la ref seleccionada ───
@@ -94,6 +101,14 @@ export default function CommitsPage({
     return () => obs.disconnect();
   }, [loadMore]);
 
+  // ── pull-to-refresh ─────────────────────────────────────
+  const doRefresh = async () => {
+    setRefreshing(true);
+    await loadFirst();
+    setRefreshing(false);
+    toast.success('Actualizado');
+  };
+
   // ── helpers UI ───────────────────────────────────────────
   const refLabel = selRef || 'default branch';
 
@@ -103,13 +118,18 @@ export default function CommitsPage({
         title="Commits"
         sub={`${owner}/${repo} · ${refLabel}`}
         actions={
-          <button
-            className="btn-icon"
-            onClick={() => setShowFilter(v => !v)}
-            title="Filtrar por rama"
-          >
-            🌿
-          </button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              className="btn-icon"
+              onClick={() => setShowFilter(v => !v)}
+              title="Filtrar por rama"
+            >
+              🌿
+            </button>
+            {info?.permissions?.push && (
+              <button className="btn-icon" onClick={() => router.push({ name: 'compare', owner, repo })} title="Compare">🔀</button>
+            )}
+          </div>
         }
       />
 
@@ -143,7 +163,7 @@ export default function CommitsPage({
         </div>
       )}
 
-      <div className="scroll-area scroll">
+      <div className="scroll-area scroll" onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, doRefresh)}>
         <div className="list">
           {loading && (
             <div className="loading"><span className="spinner" /> Cargando…</div>
@@ -186,6 +206,20 @@ export default function CommitsPage({
               >
                 📁
               </button>
+              {/* reset branch button for push users */}
+              {info?.permissions?.push && (
+                <button
+                  className="btn btn-sm btn-danger"
+                  style={{ flexShrink: 0 }}
+                  title="Reset a este commit"
+                  onClick={e => {
+                    e.stopPropagation();
+                    router.push({ name: 'reset-branch', owner, repo, sha: c.sha, branch: selRef || info.default_branch });
+                  }}
+                >
+                  ⏪
+                </button>
+              )}
             </div>
           ))}
 
@@ -207,4 +241,12 @@ export default function CommitsPage({
       </div>
     </>
   );
+}
+
+let touchStartY = 0;
+function handleTouchStart(e: React.TouchEvent) { touchStartY = e.touches[0].clientY; }
+function handleTouchEnd(e: React.TouchEvent, onRefresh: () => void) {
+  const diff = touchStartY - e.changedTouches[0].clientY;
+  const el = e.currentTarget as HTMLElement;
+  if (diff < -80 && el.scrollTop <= 0) onRefresh();
 }

@@ -610,7 +610,232 @@ textarea { resize: vertical; font-family: var(--font-mono); }
 .path-bar .crumb:hover { text-decoration: underline; }
 .path-bar .sep { color: var(--text-dim); }
 
+/* Diff highlighting */
+.diff-block {
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  user-select: text;
+  margin: 4px 0;
+}
+.diff-add {
+  background: rgba(63, 185, 80, 0.12);
+  color: #56d364;
+  padding: 0 4px;
+  border-radius: 2px;
+}
+.diff-del {
+  background: rgba(248, 81, 73, 0.12);
+  color: #ffa198;
+  padding: 0 4px;
+  border-radius: 2px;
+}
+.diff-hunk {
+  background: rgba(88, 166, 255, 0.1);
+  color: var(--accent);
+  padding: 0 4px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+.diff-ctx {
+  color: var(--text-muted);
+}
+
+/* Syntax highlighting */
+.code-block {
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-x: auto;
+  user-select: text;
+  tab-size: 2;
+}
+.hl-keyword {
+  color: #ff7b72;
+  font-weight: 600;
+}
+.hl-string {
+  color: #a5d6ff;
+}
+.hl-number {
+  color: #79c0ff;
+}
+.hl-comment {
+  color: #6e7681;
+  font-style: italic;
+}
+.hl-decorator {
+  color: #d2a8ff;
+  font-weight: 600;
+}
+
+/* Blame view */
+.blame-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.blame-row:last-child { border-bottom: none; }
+.blame-info {
+  width: 200px;
+  min-width: 200px;
+  padding: 6px 8px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-1);
+  user-select: text;
+  overflow: hidden;
+}
+.blame-info .author {
+  color: var(--text-strong);
+  font-weight: 600;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.blame-info .date {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.blame-info .sha {
+  color: var(--accent);
+  font-size: 10px;
+  cursor: pointer;
+}
+.blame-line {
+  flex: 1;
+  padding: 6px 8px;
+  color: var(--text);
+  white-space: pre;
+  overflow-x: auto;
+  background: var(--bg-0);
+  user-select: text;
+}
+.blame-group {
+  background: var(--bg-1);
+}
+.blame-group-alt {
+  background: rgba(88, 166, 255, 0.03);
+}
+
+/* Favorite badge */
+.fav-star {
+  color: var(--warn);
+  cursor: pointer;
+  font-size: 16px;
+  transition: transform .15s ease;
+}
+.fav-star:hover { transform: scale(1.2); }
+
+/* Refresh indicator */
+.refresh-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  animation: slideDown .2s ease;
+}
+@keyframes slideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* PIN Lock overlay */
+.lock-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-0);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+.lock-overlay .lock-icon {
+  font-size: 48px;
+  opacity: 0.8;
+}
+.lock-overlay .pin-dots {
+  display: flex;
+  gap: 12px;
+}
+.lock-overlay .pin-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  transition: background .15s ease;
+}
+.lock-overlay .pin-dot.filled {
+  background: var(--accent);
+}
+.lock-overlay .pin-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  gap: 12px;
+  margin-top: 16px;
+}
+.lock-overlay .pin-key {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-strong);
+  font-size: 24px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background .12s ease, transform .1s ease;
+}
+.lock-overlay .pin-key:active {
+  background: var(--bg-3);
+  transform: scale(0.95);
+}
+.lock-overlay .pin-key.empty {
+  background: transparent;
+  border: none;
+  pointer-events: none;
+}
+.lock-overlay .pin-key.delete {
+  font-size: 18px;
+}
+
+/* i18n flag badge */
+.lang-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 @media (max-width: 360px) {
   body { font-size: 14px; }
   .topbar { padding: 6px 10px; }
+  .blame-info { width: 140px; min-width: 140px; }
+  .lock-overlay .pin-key { width: 60px; height: 60px; font-size: 20px; }
+  .lock-overlay .pin-keypad { grid-template-columns: repeat(3, 60px); gap: 8px; }
 }

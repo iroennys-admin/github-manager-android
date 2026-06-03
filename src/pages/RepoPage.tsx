@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import TopBar from '../ui/TopBar';
-import { repos as reposApi, git, type Repo, type ContentEntry } from '../api/github';
+import { repos as reposApi, git, checks, type Repo, type ContentEntry, type CheckRun, type CommitStatus } from '../api/github';
 import { useRouter } from '../state/router';
+import { useApp, type FavoriteRepo } from '../state/store';
 import { toast } from '../ui/Toast';
 import Markdown from '../ui/Markdown';
+import { timeAgo } from './IssuesPage';
 
 interface Props { owner: string; repo: string; }
 
@@ -12,28 +14,51 @@ type Tab = typeof TABS[number];
 
 export default function RepoPage({ owner, repo }: Props) {
   const router = useRouter();
+  const app = useApp();
   const [info, setInfo] = useState<Repo | null>(null);
   const [readme, setReadme] = useState<string>('');
   const [tab, setTab] = useState<Tab>('code');
   const [isStar, setIsStar] = useState(false);
   const [busy, setBusy] = useState(false);
   const [langs, setLangs] = useState<Record<string, number>>({});
+  const [lastCommit, setLastCommit] = useState<{ sha: string; message: string; date: string; author: string } | null>(null);
+  const [checkRuns, setCheckRuns] = useState<CheckRun[]>([]);
+  const [commitStatuses, setCommitStatuses] = useState<CommitStatus[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    (async () => {
+  const load = async () => {
+    try {
+      const r = await reposApi.get(owner, repo);
+      setInfo(r);
+      reposApi.isStarred(owner, repo).then(setIsStar).catch(() => {});
+      reposApi.languages(owner, repo).then(setLangs).catch(() => {});
       try {
-        const r = await reposApi.get(owner, repo);
-        setInfo(r);
-        reposApi.isStarred(owner, repo).then(setIsStar).catch(() => {});
-        reposApi.languages(owner, repo).then(setLangs).catch(() => {});
-        try {
-          const rm = await reposApi.readme(owner, repo);
-          const e = rm as ContentEntry;
-          setReadme(git.decodeContent(e));
-        } catch { setReadme(''); }
-      } catch (e: any) { toast.error(e?.message); }
-    })();
-  }, [owner, repo]);
+        const rm = await reposApi.readme(owner, repo);
+        const e = rm as ContentEntry;
+        setReadme(git.decodeContent(e));
+      } catch { setReadme(''); }
+      // Load last commit and checks
+      try {
+        const commits = await git.commits(owner, repo, { sha: r.default_branch, per_page: 1 });
+        if (commits.length > 0) {
+          const c = commits[0];
+          setLastCommit({ sha: c.sha, message: c.commit.message.split('\n')[0], date: c.commit.author.date, author: c.author?.login || c.commit.author.name });
+          // Load CI checks
+          checks.runs(owner, repo, c.sha).then(r => setCheckRuns(r.check_runs || [])).catch(() => {});
+          checks.combinedStatus(owner, repo, c.sha).then(r => setCommitStatuses(r.statuses || [])).catch(() => {});
+        }
+      } catch {}
+    } catch (e: any) { toast.error(e?.message); }
+  };
+
+  useEffect(() => { load(); }, [owner, repo]);
+
+  const doRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+    toast.success('Actualizado');
+  };
 
   const toggleStar = async () => {
     if (!info) return;
@@ -53,22 +78,46 @@ export default function RepoPage({ owner, repo }: Props) {
     catch (e: any) { toast.error(e?.message); } finally { setBusy(false); }
   };
 
-  const deleteRepo = async () => {
-    if (!confirm(`¿BORRAR ${owner}/${repo}?\nEsta acción es IRREVERSIBLE.`)) return;
-    if (prompt(`Escribe "${repo}" para confirmar:`) !== repo) return;
-    setBusy(true);
-    try { await reposApi.delete(owner, repo); toast.success('Repo eliminado'); router.back(); }
-    catch (e: any) { toast.error(e?.message); } finally { setBusy(false); }
-  };
+  // Overall CI status
+  const ciStatus = checkRuns.length > 0
+    ? checkRuns.every(c => c.status === 'completed' && c.conclusion === 'success')
+      ? 'success'
+      : checkRuns.some(c => c.status === 'completed' && (c.conclusion === 'failure' || c.conclusion === 'timed_out'))
+        ? 'failure'
+        : checkRuns.some(c => c.status === 'in_progress' || c.status === 'queued')
+          ? 'pending'
+          : 'neutral'
+    : commitStatuses.length > 0
+      ? commitStatuses.every(s => s.state === 'success') ? 'success'
+        : commitStatuses.some(s => s.state === 'failure' || s.state === 'error') ? 'failure'
+        : 'pending'
+      : null;
 
   return (
     <>
       <TopBar title={repo} sub={owner} actions={
-        <button className="btn-icon" onClick={toggleStar} disabled={busy}>
-          {isStar ? '⭐' : '☆'}
-        </button>
+        <div className="flex gap-1">
+          <button className="btn-icon" onClick={doRefresh} disabled={refreshing}>
+            {refreshing ? <span className="spinner" /> : '🔄'}
+          </button>
+          <button className="fav-star" onClick={() => {
+            if (!info) return;
+            if (app.isFavorite(info.id)) {
+              app.removeFavorite(info.id);
+              toast.success('Eliminado de favoritos');
+            } else {
+              app.addFavorite({ id: info.id, full_name: info.full_name, owner: info.owner.login, repo: info.name, avatar_url: info.owner.avatar_url, addedAt: Date.now() });
+              toast.success('⭐ Agregado a favoritos');
+            }
+          }}>
+            {info && app.isFavorite(info.id) ? '⭐' : '☆'}
+          </button>
+          <button className="btn-icon" onClick={toggleStar} disabled={busy}>
+            {isStar ? '⭐' : '☆'}
+          </button>
+        </div>
       } />
-      <div className="scroll-area scroll">
+      <div className="scroll-area scroll" onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, doRefresh)}>
         {info ? (
           <>
             <div className="card" style={{ margin: 12 }}>
@@ -90,14 +139,19 @@ export default function RepoPage({ owner, repo }: Props) {
                 <span className="badge">👁 {info.watchers_count}</span>
                 {info.language && <span className="badge">{info.language}</span>}
                 {info.license && <span className="badge">{info.license.name}</span>}
+                {ciStatus && <span className={`badge ${ciStatus === 'success' ? 'success' : ciStatus === 'failure' ? 'danger' : 'warn'}`}>
+                  {ciStatus === 'success' ? '✅ CI' : ciStatus === 'failure' ? '❌ CI' : '⏳ CI'}
+                </span>}
               </div>
-              <div className="flex gap-2 mt-3">
+
+              {/* Quick actions */}
+              <div className="flex gap-2 mt-3" style={{ flexWrap: 'wrap' }}>
                 <button className="btn btn-sm" onClick={doFork} disabled={busy}>🍴 Fork</button>
                 <button className="btn btn-sm" onClick={() => router.push({ name: 'web-view', url: info.html_url, title: info.full_name })}>🌐 Abrir</button>
-                {info.permissions?.admin && (
-                  <button className="btn btn-sm btn-danger" onClick={deleteRepo} disabled={busy}>🗑 Borrar</button>
-                )}
+                <button className="btn btn-sm" onClick={() => router.push({ name: 'repo-search', owner, repo })}>🔍 Buscar</button>
+                <button className="btn btn-sm" onClick={() => router.push({ name: 'repo-settings', owner, repo })}>⚙️ Settings</button>
               </div>
+
               {Object.keys(langs).length > 0 && (
                 <div className="mt-3">
                   <div className="muted tiny">Lenguajes</div>
@@ -105,6 +159,31 @@ export default function RepoPage({ owner, repo }: Props) {
                 </div>
               )}
             </div>
+
+            {/* CI Checks summary */}
+            {(checkRuns.length > 0 || commitStatuses.length > 0) && (
+              <div className="card" style={{ margin: '0 12px' }}>
+                <div className="section-title" style={{ padding: '0 0 6px' }}>CI / Checks</div>
+                {checkRuns.map(cr => (
+                  <div key={cr.id} className="row-between" style={{ padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div className="flex gap-2" style={{ alignItems: 'center' }}>
+                      <span>{cr.status === 'completed' ? (cr.conclusion === 'success' ? '✅' : cr.conclusion === 'failure' ? '❌' : '⚪') : cr.status === 'in_progress' ? '🔄' : '⏳'}</span>
+                      <span className="small">{cr.name}</span>
+                    </div>
+                    <button className="btn btn-sm" onClick={() => window.open(cr.html_url, '_blank')}>Ver</button>
+                  </div>
+                ))}
+                {commitStatuses.slice(0, 5).map(cs => (
+                  <div key={cs.id} className="row-between" style={{ padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div className="flex gap-2" style={{ alignItems: 'center' }}>
+                      <span>{cs.state === 'success' ? '✅' : cs.state === 'failure' || cs.state === 'error' ? '❌' : '⏳'}</span>
+                      <span className="small">{cs.context}</span>
+                    </div>
+                    {cs.target_url && <button className="btn btn-sm" onClick={() => window.open(cs.target_url, '_blank')}>Ver</button>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="tabs">
               {TABS.map(t => (
@@ -120,9 +199,23 @@ export default function RepoPage({ owner, repo }: Props) {
                   <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
                     <button className="btn btn-sm" onClick={() => router.push({ name: 'files', owner, repo })}>📁 Files</button>
                     <button className="btn btn-sm" onClick={() => router.push({ name: 'branches', owner, repo })}>🌿 Branches</button>
-                    <button className="btn btn-sm" onClick={() => router.push({ name: 'commits', owner, repo })}>📜 Commits</button>
+                    <button className="btn btn-sm" onClick={() => router.push({ name: 'commits', owner, repo })}>📜 Historial</button>
+                    <button className="btn btn-sm" onClick={() => router.push({ name: 'compare', owner, repo })}>🔀 Comparar</button>
                   </div>
                 </div>
+                {/* Last commit */}
+                {lastCommit && (
+                  <div className="card-row" style={{ marginBottom: 8 }} onClick={() => router.push({ name: 'commit', owner, repo, sha: lastCommit.sha })}>
+                    <div style={{ fontSize: 18 }}>🟢</div>
+                    <div className="body">
+                      <div className="title truncate">{lastCommit.message}</div>
+                      <div className="sub">{lastCommit.author} · {timeAgo(lastCommit.date)} · <span className="mono">{lastCommit.sha.slice(0, 7)}</span></div>
+                    </div>
+                    {info?.permissions?.push && (
+                      <button className="btn btn-sm btn-danger" onClick={(e) => { e.stopPropagation(); router.push({ name: 'reset-branch', owner, repo, sha: lastCommit.sha }); }}>⏪</button>
+                    )}
+                  </div>
+                )}
                 {readme ? <div className="card"><Markdown text={readme} /></div>
                         : <div className="muted small center" style={{ padding: 16 }}>Sin README.</div>}
               </div>
@@ -186,6 +279,15 @@ export default function RepoPage({ owner, repo }: Props) {
       </div>
     </>
   );
+}
+
+// Pull-to-refresh touch handler
+let touchStartY = 0;
+function handleTouchStart(e: React.TouchEvent) { touchStartY = e.touches[0].clientY; }
+function handleTouchEnd(e: React.TouchEvent, onRefresh: () => void) {
+  const diff = touchStartY - e.changedTouches[0].clientY;
+  const el = e.currentTarget as HTMLElement;
+  if (diff < -80 && el.scrollTop <= 0) onRefresh();
 }
 
 function tabLabel(t: Tab) {

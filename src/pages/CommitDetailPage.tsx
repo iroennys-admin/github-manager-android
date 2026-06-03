@@ -5,7 +5,7 @@
 // ============================================================
 import React, { useEffect, useState } from 'react';
 import TopBar from '../ui/TopBar';
-import { git, type Commit } from '../api/github';
+import { git, repos, checks, type Commit, type Repo, type CheckRun } from '../api/github';
 import { useRouter } from '../state/router';
 import { toast } from '../ui/Toast';
 import { timeAgo } from './IssuesPage';
@@ -24,9 +24,11 @@ export default function CommitDetailPage({
   owner, repo, sha, commitList = [], commitIdx = -1,
 }: Props) {
   const router = useRouter();
-  const [c, setC]         = useState<Commit | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [copying, setCopying] = useState(false);
+  const [c, setC]             = useState<Commit | null>(null);
+  const [info, setInfo]       = useState<Repo | null>(null);
+  const [checkRuns, setCheckRuns] = useState<CheckRun[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [copying, setCopying]     = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -35,6 +37,8 @@ export default function CommitDetailPage({
       .then(setC)
       .catch(e => toast.error(e.message))
       .finally(() => setLoading(false));
+    repos.get(owner, repo).then(setInfo).catch(() => {});
+    checks.runs(owner, repo, sha).then(r => setCheckRuns(r.check_runs || [])).catch(() => {});
   }, [owner, repo, sha]);
 
   // ── navegación prev / next ───────────────────────────────
@@ -69,6 +73,15 @@ export default function CommitDetailPage({
     } catch { toast.error('No se pudo copiar'); }
   };
 
+  // ── CI status ─────────────────────────────────────────────
+  const ciStatus = checkRuns.length > 0
+    ? checkRuns.every(cr => cr.status === 'completed' && cr.conclusion === 'success')
+      ? 'success'
+      : checkRuns.some(cr => cr.status === 'completed' && (cr.conclusion === 'failure' || cr.conclusion === 'timed_out'))
+        ? 'failure'
+        : 'pending'
+    : null;
+
   // ── estado de carga ──────────────────────────────────────
   if (loading) {
     return (
@@ -90,23 +103,29 @@ export default function CommitDetailPage({
         title={sha.slice(0, 7)}
         sub={`${owner}/${repo}`}
         actions={
-          /* botones prev / next solo si venimos del historial */
-          commitList.length > 0 ? (
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button
-                className="btn btn-sm"
-                disabled={!hasPrev}
-                onClick={goPrev}
-                title="Commit más nuevo"
-              >◀</button>
-              <button
-                className="btn btn-sm"
-                disabled={!hasNext}
-                onClick={goNext}
-                title="Commit más antiguo"
-              >▶</button>
-            </div>
-          ) : undefined
+          <div style={{ display: 'flex', gap: 4 }}>
+            {/* botones prev / next solo si venimos del historial */}
+            {commitList.length > 0 && (
+              <>
+                <button
+                  className="btn btn-sm"
+                  disabled={!hasPrev}
+                  onClick={goPrev}
+                  title="Commit más nuevo"
+                >◀</button>
+                <button
+                  className="btn btn-sm"
+                  disabled={!hasNext}
+                  onClick={goNext}
+                  title="Commit más antiguo"
+                >▶</button>
+              </>
+            )}
+            {/* reset branch button if user has push access */}
+            {info?.permissions?.push && (
+              <button className="btn-icon" onClick={() => router.push({ name: 'reset-branch', owner, repo, sha })}>⏪</button>
+            )}
+          </div>
         }
       />
 
@@ -148,14 +167,20 @@ export default function CommitDetailPage({
           </div>
 
           {/* stats */}
-          {c.stats && (
-            <div className="flex gap-2" style={{ marginTop: 10 }}>
+          <div className="flex gap-2" style={{ marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            {c.stats && <>
               <span className="badge success">+{c.stats.additions}</span>
               <span className="badge danger">−{c.stats.deletions}</span>
               <span className="badge">{c.stats.total} cambios</span>
               <span className="badge">{c.files?.length || 0} archivos</span>
-            </div>
-          )}
+            </>}
+            {/* CI status badge */}
+            {ciStatus && (
+              <span className={`badge ${ciStatus === 'success' ? 'success' : ciStatus === 'failure' ? 'danger' : 'warn'}`}>
+                {ciStatus === 'success' ? '✅ CI' : ciStatus === 'failure' ? '❌ CI' : '⏳ CI'}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* ── acciones principales ── */}
@@ -203,6 +228,30 @@ export default function CommitDetailPage({
           </button>
         </div>
 
+        {/* ── CI Checks ── */}
+        {checkRuns.length > 0 && (
+          <>
+            <div className="section-title">Checks ({checkRuns.length})</div>
+            <div className="list">
+              {checkRuns.map(cr => (
+                <div key={cr.id} className="card-row">
+                  <div style={{ fontSize: 18 }}>
+                    {cr.status === 'completed' ? (cr.conclusion === 'success' ? '✅' : cr.conclusion === 'failure' ? '❌' : '⚪') : cr.status === 'in_progress' ? '🔄' : '⏳'}
+                  </div>
+                  <div className="body">
+                    <div className="title">{cr.name}</div>
+                    <div className="sub">
+                      {cr.status === 'completed' ? cr.conclusion || 'done' : cr.status}
+                      {cr.completed_at && ` · ${timeAgo(cr.completed_at)}`}
+                    </div>
+                  </div>
+                  <button className="btn btn-sm" onClick={() => window.open(cr.html_url, '_blank')}>Ver</button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* ── archivos modificados ── */}
         <div className="section-title" style={{ paddingLeft: 16 }}>
           Archivos modificados ({c.files?.length || 0})
@@ -241,45 +290,8 @@ export default function CommitDetailPage({
                 )}
               </div>
 
-              {/* patch (diff coloreado) */}
-              {f.patch && (
-                <pre
-                  style={{
-                    marginTop: 8,
-                    maxHeight: 280,
-                    overflow: 'auto',
-                    fontSize: 11,
-                    lineHeight: 1.4,
-                    borderRadius: 6,
-                    background: 'var(--bg-0)',
-                    padding: '8px 6px',
-                    whiteSpace: 'pre',
-                  }}
-                >
-                  {f.patch.split('\n').map((line, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        display: 'block',
-                        color: line.startsWith('+')
-                          ? 'var(--success)'
-                          : line.startsWith('-')
-                          ? 'var(--danger)'
-                          : line.startsWith('@@')
-                          ? 'var(--accent-2)'
-                          : 'var(--text-muted)',
-                        background: line.startsWith('+')
-                          ? 'rgba(63,185,80,0.08)'
-                          : line.startsWith('-')
-                          ? 'rgba(248,81,73,0.08)'
-                          : 'transparent',
-                      }}
-                    >
-                      {line || ' '}
-                    </span>
-                  ))}
-                </pre>
-              )}
+              {/* patch (diff coloreado con DiffView) */}
+              {f.patch && <DiffView patch={f.patch} />}
 
               {/* si el archivo no fue eliminado, botón para verlo */}
               {f.status !== 'removed' && (
@@ -295,6 +307,7 @@ export default function CommitDetailPage({
             </div>
           ))}
         </div>
+        <div style={{ height: 24 }} />
       </div>
     </>
   );
@@ -305,4 +318,35 @@ function statusIcon(s: string) {
 }
 function statusBadge(s: string) {
   return { added: 'success', removed: 'danger', modified: 'warn', renamed: '', copied: '' }[s] ?? '';
+}
+
+// ── Diff viewer with color & expand/collapse ────────────────
+function DiffView({ patch }: { patch: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const lines = patch.split('\n');
+  const preview = lines.slice(0, 12);
+  const display = expanded ? lines : preview;
+  const hasMore = lines.length > 12;
+
+  return (
+    <div className="mt-2">
+      <div className="flex gap-2" style={{ alignItems: 'center', marginBottom: 4 }}>
+        <button className="btn btn-sm" style={{ padding: '2px 8px' }} onClick={() => setExpanded(!expanded)}>
+          {expanded ? '▼ Colapsar' : '▶ Expandir'}
+        </button>
+      </div>
+      <pre className="diff-block" style={{ maxHeight: expanded ? 500 : 150, overflow: 'auto' }}>
+        {display.map((line, i) => (
+          <div key={i} className={line.startsWith('+') ? 'diff-add' : line.startsWith('-') ? 'diff-del' : line.startsWith('@@') ? 'diff-hunk' : 'diff-ctx'}>
+            {line}
+          </div>
+        ))}
+      </pre>
+      {hasMore && !expanded && (
+        <button className="btn btn-sm mt-1" style={{ width: '100%' }} onClick={() => setExpanded(true)}>
+          Ver diff completo ({lines.length} líneas)
+        </button>
+      )}
+    </div>
+  );
 }

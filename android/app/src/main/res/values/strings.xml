@@ -5,4 +5,10 @@
     <string name="package_name">com.octomobile.app</string>
     <string name="custom_url_scheme">com.octomobile.app</string>
     <string name="widget_description">GitHub notifications at a glance</string>
+    <string name="shortcut_notifications">Notifications</string>
+    <string name="shortcut_notifications_long">View Notifications</string>
+    <string name="shortcut_search">Search</string>
+    <string name="shortcut_search_long">Search GitHub</string>
+    <string name="shortcut_repos">Repos</string>
+    <string name="shortcut_repos_long">My Repositories</string>
 </resources>
